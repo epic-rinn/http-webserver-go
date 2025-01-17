@@ -2,8 +2,8 @@ package main
 
 import "net"
 
-func HandleRoute(c net.Conn, headers Request) {
-	switch headers["Path"] {
+func HandleRoute(c net.Conn, req Request) {
+	switch req.Path {
 	case "/":
 		c.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
 	default:
