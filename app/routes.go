@@ -1,12 +1,12 @@
 package main
 
-import "net"
-
-func HandleRoute(c net.Conn, req Request) {
+func HandleRoute(rw ResponseWriter, req *Request) {
 	switch req.Path {
 	case "/":
-		c.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		rw.Write(StatusOK, []byte("OK"))
+	case "/echo/:str":
+		rw.Write(StatusOK, []byte(req.Path[len("/echo/"):]))
 	default:
-		c.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		rw.Write(StatusNotFound, []byte("Not Found"))
 	}
 }
