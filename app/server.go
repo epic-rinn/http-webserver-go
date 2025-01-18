@@ -8,7 +8,11 @@ import (
 	"time"
 )
 
-type HandlerFunc func(ResponseWriter, *Request)
+type HttpHandlerFunc func(w ResponseWriter, r *Request)
+
+type HttpHandler interface {
+	ServeHTTP(ResponseWriter, *Request)
+}
 
 const (
 	StatusOK            int = 200
@@ -17,9 +21,21 @@ const (
 	StatusInternalError int = 500
 )
 
+const (
+	CRLF                  = "\r\n"
+	DefaultReadBufferSize = 4096
+)
+
+var StatusMessage = map[int]string{
+	StatusOK:            "OK",
+	StatusNotFound:      "Not Found",
+	StatusBadRequest:    "Bad Request",
+	StatusInternalError: "Internal Server Error",
+}
+
 type Server struct {
 	Addr    string
-	Handler HandlerFunc
+	Handler HttpHandler
 }
 
 type response struct {
@@ -59,26 +75,16 @@ func (r *response) WriteHeaderLines() {
 		return
 	}
 
-	var s string
-	switch r.status {
-	case StatusOK:
-		s = "OK"
-	case StatusNotFound:
-		s = "Not Found"
-	case StatusBadRequest:
-		s = "Bad Request"
-	case StatusInternalError:
-		s = "Internal Server Error"
-	}
-	fmt.Fprintf(r.w, "HTTP/1.1 %d %s\r\n", r.status, s)
+	s := StatusMessage[r.status]
+	fmt.Fprintf(r.w, "HTTP/1.1 %d %s%s", r.status, s, CRLF)
 
 	for k, v := range r.header {
 		for _, value := range v {
-			fmt.Fprintf(r.w, "%s: %s\r\n", k, value)
+			fmt.Fprintf(r.w, "%s: %s%s", k, value, CRLF)
 		}
 	}
 
-	r.w.WriteString("\r\n")
+	r.w.WriteString(CRLF)
 	r.wroteHeader = true
 }
 
@@ -94,7 +100,8 @@ func (r *response) Flush() error {
 func (a *application) Serve() error {
 	port := a.config.Port
 	s := &Server{
-		Addr: fmt.Sprintf("0.0.0.0:%d", port),
+		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
+		Handler: a.Routes(),
 	}
 
 	fmt.Printf("Server started on address: %s\n", s.Addr)
@@ -124,16 +131,16 @@ func (s *Server) ListenAndServe() error {
 			continue
 		}
 
-		rw := &response{conn: c, req: &req, header: make(Header), w: bufio.NewWriter(c)}
+		r := &response{conn: c, req: &req, header: make(Header), w: bufio.NewWriter(c)}
 
-		go handleReq(rw)
+		go s.handleReq(r)
 	}
 }
 
-func handleReq(r *response) {
+func (s *Server) handleReq(r *response) {
 	defer r.conn.Close()
 	r.req.Log()
-	HandleRoute(r, r.req)
+	s.Handler.ServeHTTP(r, r.req)
 
 	if err := r.Flush(); err != nil {
 		fmt.Println("Error flushing response:", err)

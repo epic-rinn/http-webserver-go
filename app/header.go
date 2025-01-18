@@ -73,7 +73,7 @@ type Request struct {
 }
 
 func ParseRequest(c net.Conn) (Request, error) {
-	tempBuf := make([]byte, 4096)
+	tempBuf := make([]byte, DefaultReadBufferSize)
 	var cd strings.Builder
 
 	n, err := c.Read(tempBuf)
