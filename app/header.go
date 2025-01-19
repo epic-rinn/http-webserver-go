@@ -70,6 +70,8 @@ type Request struct {
 	//		"Foo": {"two"},
 	//	}
 	Header Header
+
+	Params Params
 }
 
 func ParseRequest(c net.Conn) (Request, error) {
