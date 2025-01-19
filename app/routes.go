@@ -60,6 +60,10 @@ func (r *Router) match(method, rawPath string) (HttpHandlerFunc, Params, bool) {
 
 	cleanPath := parsedURL.Path
 
+	if len(cleanPath) > 1 && strings.HasSuffix(cleanPath, "/") {
+		cleanPath = cleanPath[:len(cleanPath)-1]
+	}
+
 	for _, route := range r.routes {
 		if route.Method != method {
 			continue
@@ -99,7 +103,7 @@ func (r *Router) compilePattern(pattern string) (*regexp.Regexp, []string, error
 
 	for _, match := range matches {
 		params = append(params, match[1])
-		regexPattern = strings.Replace(regexPattern, match[0], `([^/]+)`, 1)
+		regexPattern = strings.Replace(regexPattern, regexp.QuoteMeta(match[0]), `([^/]+)`, 1)
 	}
 
 	// Anchor the pattern
