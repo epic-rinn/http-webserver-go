@@ -141,6 +141,8 @@ func (app *application) Routes() HttpHandler {
 
 	router.GET("/v1/healthcheck", app.Healthcheck)
 	router.GET("/v1/echo/:str", app.Echo)
+	router.GET("/v1/user-agent", app.UserAgent)
+
 	router.NotFound = app.NotFound
 
 	return router
