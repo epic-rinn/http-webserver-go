@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 )
 
@@ -60,13 +59,17 @@ func (r *response) Header() Header {
 }
 
 func (r *response) Write(status int, b []byte) (int, error) {
+	// Set content headers if not already set
+	if r.header.Get("Content-Type") == "" {
+		r.header.Set("Content-Type", "text/plain")
+	}
+
 	r.WriteHeader(status)
-	r.Header().Set("Content-Type", "text/plain")
-	r.Header().Set("Content-Length", strconv.Itoa(len(b)))
 
 	if !r.wroteHeader {
 		r.WriteHeaderLines()
 	}
+
 	return r.w.Write(b)
 }
 
