@@ -21,8 +21,12 @@ const (
 )
 
 const (
-	CRLF                  = "\r\n"
-	DefaultReadBufferSize = 4096
+	CRLF                   = "\r\n"
+	DefaultReadBufferSize  = 4096
+	DefaultWriteBufferSize = 4096
+	ReadTimeout            = 10 * time.Second
+	WriteTimeout           = 10 * time.Second
+	IdleTimeout            = 60 * time.Second
 )
 
 var StatusMessage = map[int]string{
@@ -67,13 +71,13 @@ func (r *response) Write(status int, b []byte) (int, error) {
 	r.WriteHeader(status)
 
 	if !r.wroteHeader {
-		r.WriteHeaderLines()
+		r.writeHeaderLines()
 	}
 
 	return r.w.Write(b)
 }
 
-func (r *response) WriteHeaderLines() {
+func (r *response) writeHeaderLines() {
 	if r.wroteHeader {
 		return
 	}
@@ -92,6 +96,10 @@ func (r *response) WriteHeaderLines() {
 }
 
 func (w *response) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
+
 	checkWriteHeader(code)
 	w.status = code
 }
@@ -126,28 +134,51 @@ func (s *Server) ListenAndServe() error {
 			return fmt.Errorf("error accepting connection: %w", err)
 		}
 
-		req, err := ParseRequest(c)
-
-		if err != nil {
-			fmt.Println("Error reading headers: ", err.Error())
-			// TODO: Handle request parsing error
-			continue
-		}
-
-		r := &response{conn: c, req: &req, header: make(Header), w: bufio.NewWriter(c)}
-
-		go s.handleReq(r)
+		go s.handleConn(c)
 	}
 }
 
+func (s *Server) handleConn(c net.Conn) {
+	defer (func() {
+		if err := recover(); err != nil {
+			fmt.Printf("Panic in handleConnection: %v\n", err)
+		}
+		c.Close()
+	})()
+
+	c.SetReadDeadline(time.Now().Add(ReadTimeout))
+	c.SetWriteDeadline(time.Now().Add(WriteTimeout))
+
+	req, err := ParseRequest(c)
+
+	if err != nil {
+		fmt.Println("Error reading headers: ", err.Error())
+		s.HandleUnknownError(c, StatusBadRequest, "Bad Request")
+		return
+	}
+
+	r := &response{conn: c, req: &req, header: make(Header), w: bufio.NewWriterSize(c, DefaultWriteBufferSize)}
+
+	s.handleReq(r)
+}
+
 func (s *Server) handleReq(r *response) {
-	defer r.conn.Close()
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("Panic in handleReq: %v\n", err)
+			if !r.wroteHeader {
+				r.WriteHeader(StatusInternalError)
+				r.writeHeaderLines()
+			}
+		}
+
+		if err := r.Flush(); err != nil {
+			fmt.Println("Error flushing response:", err)
+		}
+	}()
+
 	r.req.Log()
 	s.Handler.ServeHTTP(r, r.req)
-
-	if err := r.Flush(); err != nil {
-		fmt.Println("Error flushing response:", err)
-	}
 }
 
 func (req *Request) Log() {
